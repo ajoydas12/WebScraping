@@ -3,20 +3,22 @@ from streamlit_tags import st_tags_sidebar
 import pandas as pd
 import json
 from datetime import datetime
-from scraper import fetch_html_selenium, save_raw_data, format_data, save_formatted_data, calculate_price,html_to_markdown_with_readability, create_dynamic_listing_model,create_listings_container_model
-
+from scraper import fetch_html_selenium, save_raw_data, format_data, save_formatted_data, calculate_price, html_to_markdown_with_readability, create_dynamic_listing_model, create_listings_container_model
 
 # Initialize Streamlit app
-st.set_page_config(page_title="Universal Web Scraper")
+st.set_page_config(page_title="Universal Web Scraper", page_icon="🦑", layout="wide")
 st.title("Universal Web Scraper 🦑")
 
 # Sidebar components
-st.sidebar.title("Web Scraper Settings")
+st.sidebar.header("Settings ⚙️")
 model_selection = st.sidebar.selectbox("Select Model", options=["gpt-4o-mini", "gpt-4o-2024-08-06"], index=0)
-url_input = st.sidebar.text_input("Enter URL")
 
+# URL input with validation
+url_input = st.sidebar.text_input("Enter URL", placeholder="https://example.com")
+if not url_input:
+    st.sidebar.warning("Please enter a valid URL.")
 
-# Tags input specifically in the sidebar
+# Tags input for fields to extract
 tags = st.sidebar.empty()  # Create an empty placeholder in the sidebar
 tags = st_tags_sidebar(
     label='Enter Fields to Extract:',
@@ -27,17 +29,14 @@ tags = st_tags_sidebar(
     key='tags_input'
 )
 
-
-st.sidebar.markdown("---")
-
-# Process tags into a list
 fields = tags
 
-# Initialize variables to store token and cost information
+# Display token usage in a dedicated section
+st.sidebar.markdown("---")
+st.sidebar.subheader("Token Usage 💳")
 input_tokens = output_tokens = total_cost = 0  # Default values
 
-# Buttons to trigger scraping
-# Define the scraping function
+# Scraping function
 def perform_scrape():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     raw_html = fetch_html_selenium(url_input)
@@ -52,45 +51,56 @@ def perform_scrape():
 
     return df, formatted_data, markdown, input_tokens, output_tokens, total_cost, timestamp
 
-# Handling button press for scraping
+# Handling scrape button
 if 'perform_scrape' not in st.session_state:
     st.session_state['perform_scrape'] = False
 
-if st.sidebar.button("Scrape"):
-    with st.spinner('Please wait... Data is being scraped.'):
-        st.session_state['results'] = perform_scrape()
-        st.session_state['perform_scrape'] = True
+# Button to trigger scraping
+if st.sidebar.button("Start Scraping 🕸️"):
+    if url_input:
+        with st.spinner('Please wait... Scraping the data 🕵️‍♂️'):
+            st.session_state['results'] = perform_scrape()
+            st.session_state['perform_scrape'] = True
+    else:
+        st.sidebar.error("Please enter a valid URL before scraping!")
 
+# Display results
 if st.session_state.get('perform_scrape'):
     df, formatted_data, markdown, input_tokens, output_tokens, total_cost, timestamp = st.session_state['results']
-    # Display the DataFrame and other data
-    st.write("Scraped Data:", df)
-    st.sidebar.markdown("## Token Usage")
-    st.sidebar.markdown(f"**Input Tokens:** {input_tokens}")
-    st.sidebar.markdown(f"**Output Tokens:** {output_tokens}")
-    st.sidebar.markdown(f"**Total Cost:** :green-background[***${total_cost:.4f}***]")
 
-    # Create columns for download buttons
+    # Show data in tabs
+    tab1, tab2, tab3 = st.tabs(["📊 Data", "📝 Markdown", "⚙️ Tokens"])
+
+    with tab1:
+        st.write("Scraped Data Preview:")
+        st.dataframe(df)
+
+    with tab2:
+        st.write("Generated Markdown:")
+        st.code(markdown)
+
+    with tab3:
+        st.metric("Input Tokens", input_tokens)
+        st.metric("Output Tokens", output_tokens)
+        st.metric("Total Cost ($)", f"${total_cost:.4f}")
+
+    # Download buttons
+    st.subheader("Download Results 💾")
     col1, col2, col3 = st.columns(3)
+
     with col1:
-        st.download_button("Download JSON", data=json.dumps(formatted_data.dict(), indent=4), file_name=f"{timestamp}_data.json")
+        st.download_button("Download JSON", data=json.dumps(formatted_data.dict(), indent=4), file_name=f"{timestamp}_data.json", mime='application/json')
+
     with col2:
-        # Convert formatted data to a dictionary if it's not already (assuming it has a .dict() method)
         data_dict = formatted_data.dict() if hasattr(formatted_data, 'dict') else formatted_data
-        
-        # Access the data under the dynamic key
-        first_key = next(iter(data_dict))  # Safely get the first key
-        main_data = data_dict[first_key]   # Access data using this key
-
-        # Create DataFrame from the data
+        first_key = next(iter(data_dict))
+        main_data = data_dict[first_key]
         df = pd.DataFrame(main_data)
+        st.download_button("Download CSV", data=df.to_csv(index=False), file_name=f"{timestamp}_data.csv", mime='text/csv')
 
-        # data_dict=json.dumps(formatted_data.dict(), indent=4)
-        st.download_button("Download CSV", data=df.to_csv(index=False), file_name=f"{timestamp}_data.csv")
     with col3:
-        st.download_button("Download Markdown", data=markdown, file_name=f"{timestamp}_data.md")
+        st.download_button("Download Markdown", data=markdown, file_name=f"{timestamp}_data.md", mime='text/markdown')
 
-# Ensure that these UI components are persistent and don't rely on re-running the scrape function
+# Persistent UI components
 if 'results' in st.session_state:
     df, formatted_data, markdown, input_tokens, output_tokens, total_cost, timestamp = st.session_state['results']
-        
